@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+
+# original full-size source images (superseded by the optimised files in public/).
+# Kept on disk for re-export, deliberately out of git — ~20MB of PNGs.
+src-assets/
+
+# logs
+*.log
+npm-debug.log*
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# editor / OS
+.vscode/*
+.idea/
+.DS_Store
+Thumbs.db
+*.local

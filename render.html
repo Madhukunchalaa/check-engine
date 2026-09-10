@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Render harness</title>
+  <style>html,body{margin:0;height:100%;background:#08080A;overflow:hidden}#stage{position:fixed;inset:0}</style>
+</head>
+<body>
+  <!--
+    Dev-only harness. Loads the configurator with no UI so the gloss/matte
+    frames used by the compare slider can be captured straight from the same
+    scene the visitor interacts with. Not part of the production build.
+    Usage: /render.html?finish=0&wrap=0&view=paint
+  -->
+  <div id="stage"></div>
+  <script type="module">
+    import { createConfigurator } from './src/configurator.js';
+    const q = new URLSearchParams(location.search);
+    const car = createConfigurator(document.getElementById('stage'), {
+      onReady() {
+        car.setWrap(Number(q.get('wrap') ?? 0));
+        car.setFinish(Number(q.get('finish') ?? 0));
+        car.setAlloy(Number(q.get('alloy') ?? 2));
+        car.setCaliper(Number(q.get('caliper') ?? 0));
+        car.setView(q.get('view') || 'paint', true);
+        // Freeze the turntable so both captures frame identically.
+        setTimeout(() => { window.__ready = true; }, 1200);
+      },
+    });
+    car.resume = () => {};
+  </script>
+</body>
+</html>
