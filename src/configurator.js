@@ -93,6 +93,11 @@ export function createConfigurator(canvasHost, opts = {}) {
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.34;
 
+  // A full-bleed canvas that swallows one-finger drags traps the visitor in the
+  // hero: OrbitControls sets touch-action:none, so the page can never scroll
+  // past it. Hand vertical swipes back to the browser, keep the rest for orbit.
+  if (matchMedia('(pointer: coarse)').matches) renderer.domElement.style.touchAction = 'pan-y';
+
   // ------------------------------------------------------------ ground
   // Dark, semi-polished concrete. Kept barely reflective so the HDRI shows as a
   // sheen under the car rather than turning the floor into a mirror of a sunset.
@@ -240,11 +245,26 @@ export function createConfigurator(canvasHost, opts = {}) {
     const S = Math.max(size.x, size.z);
     pool.scale.set(S * 1.22, S * 0.66, 1);
     controls.minDistance = S * 0.62;
-    controls.maxDistance = S * 2.6;
+    roomDist = S * 2.6;
+    controls.maxDistance = roomDist;
     scene.fog.density = 0.055 / (S / 4.5);
 
     scene.add(car);
     scaleViews(S);
+
+    // Corners of the car as it now stands, so the responsive fit can measure
+    // what actually has to be on screen rather than guessing at a radius.
+    const world = new THREE.Box3().setFromObject(car);
+    for (let i = 0; i < 8; i++) {
+      corners.push(new THREE.Vector3(
+        i & 1 ? world.max.x : world.min.x,
+        i & 2 ? world.max.y : world.min.y,
+        i & 4 ? world.max.z : world.min.z,
+      ));
+    }
+    baseDist = new THREE.Vector3(...framed[0].pos).distanceTo(new THREE.Vector3(...framed[0].tgt));
+    reframe();
+
     applyView('overview', true);
     ready = true;
     opts.onReady?.();
@@ -259,13 +279,79 @@ export function createConfigurator(canvasHost, opts = {}) {
     });
   }
 
+  // ------------------------------------------------------------ responsive frame
+  // Those presets were framed for a wide desktop hero. A portrait phone keeps
+  // the vertical field of view but throws away most of the horizontal one,
+  // which is what cropped the car down to a door and a wheel arch. So on a
+  // narrow viewport: widen the lens, push the presets back until the whole car
+  // sits inside the frustum, and slide the framing into the strip the headline
+  // and the dock leave free rather than the middle of the canvas.
+  const WORLD_UP = new THREE.Vector3(0, 1, 0);
+  const corners = [];      // car bounding box in world space, filled on load
+  let baseDist = 0;        // overview preset distance before any fitting
+  let roomDist = 0;        // controls.maxDistance before any fitting
+  let fit = 1;             // distance multiplier applied to every preset
+  let shift = 0;           // vertical nudge, as a fraction of canvas height
+
+  const halfTan = () => Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+
+  // The distance at which the whole car clears the given half-angles.
+  function fitDistance(v, tanH, tanV) {
+    const tgt = new THREE.Vector3(...v.tgt);
+    const dir = new THREE.Vector3(...v.pos).sub(tgt).normalize();
+    const right = new THREE.Vector3().crossVectors(WORLD_UP, dir).normalize();
+    const up = new THREE.Vector3().crossVectors(dir, right).normalize();
+    const p = new THREE.Vector3();
+    let d = 0;
+    corners.forEach((c) => {
+      p.subVectors(c, tgt);
+      const depth = p.dot(dir);
+      d = Math.max(d, Math.abs(p.dot(right)) / tanH + depth, Math.abs(p.dot(up)) / tanV + depth);
+    });
+    return d * 1.08;       // a little air around the car
+  }
+
+  function reframe() {
+    const w = canvasHost.clientWidth || 1;
+    const h = canvasHost.clientHeight || 1;
+    const aspect = w / h;
+
+    camera.aspect = aspect;
+    camera.fov = aspect < 0.85 ? 52 : aspect < 1.25 ? 46 : 40;
+    camera.updateProjectionMatrix();
+
+    // The band of canvas the overlays leave to the car.
+    const inset = opts.safeInsets?.() || { top: 0, bottom: 0 };
+    const band = Math.min(h, Math.max(h * 0.28, h - inset.top - inset.bottom));
+    shift = (inset.top + band / 2 - h / 2) / h;
+
+    if (corners.length) {
+      fit = Math.max(1, fitDistance(framed[0], halfTan() * aspect, halfTan() * (band / h)) / baseDist);
+      controls.maxDistance = roomDist * fit;
+    }
+  }
+
   // ------------------------------------------------------------ camera flight
   let flight = null;
+
+  // A preset, pushed back by the responsive fit and panned into the free band.
+  function placement(v) {
+    const tgt = new THREE.Vector3(...v.tgt);
+    const pos = new THREE.Vector3(...v.pos).sub(tgt).multiplyScalar(fit).add(tgt);
+    if (shift) {
+      const dir = new THREE.Vector3().subVectors(tgt, pos).normalize();
+      const right = new THREE.Vector3().crossVectors(dir, WORLD_UP).normalize();
+      const up = new THREE.Vector3().crossVectors(right, dir).normalize();
+      up.multiplyScalar(shift * 2 * pos.distanceTo(tgt) * halfTan());
+      pos.add(up); tgt.add(up);
+    }
+    return { pos, tgt };
+  }
+
   function applyView(id, instant = false) {
     const v = framed.find((x) => x.id === id) || framed[0];
     state.view = id;
-    const toPos = new THREE.Vector3(...v.pos);
-    const toTgt = new THREE.Vector3(...v.tgt);
+    const { pos: toPos, tgt: toTgt } = placement(v);
     if (instant) {
       camera.position.copy(toPos);
       controls.target.copy(toTgt);
@@ -308,6 +394,8 @@ export function createConfigurator(canvasHost, opts = {}) {
       if (state.night) api.toggleLights(true);
     },
     resume() { controls.autoRotate = true; },
+    // Re-measure once late-loading webfonts have settled the overlay heights.
+    refresh() { onResize(); },
     summary() {
       return `${WRAPS[state.wrap].name} · ${FINISHES[state.finish].name} finish · ` +
              `${ALLOYS[state.alloy].name} alloys · ${CALIPERS[state.caliper].name} callipers`;
@@ -340,13 +428,24 @@ export function createConfigurator(canvasHost, opts = {}) {
 
   controls.addEventListener('start', () => { controls.autoRotate = false; idle = 0; });
 
+  // Phones fire resize constantly as the URL bar slides in and out, so re-frame
+  // only when the framing itself actually moved — otherwise the camera would
+  // snap back to the preset on every scroll.
+  let resizeRaf = 0;
   const onResize = () => {
-    const w = canvasHost.clientWidth, h = canvasHost.clientHeight;
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    renderer.setSize(w, h);
+    cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(() => {
+      const w = canvasHost.clientWidth, h = canvasHost.clientHeight;
+      renderer.setSize(w, h);
+      const was = { fov: camera.fov, fit, shift };
+      reframe();
+      if (camera.fov !== was.fov || Math.abs(fit - was.fit) > 0.04 || Math.abs(shift - was.shift) > 0.025) {
+        applyView(state.view, true);
+      }
+    });
   };
   addEventListener('resize', onResize);
+  addEventListener('orientationchange', onResize);
 
   if (import.meta.env.DEV) window.__car = { scene, api, mats: { bodyMat, headMat, tailMat, alloyMat, caliperMat } };
 

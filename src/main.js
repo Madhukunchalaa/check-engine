@@ -6,7 +6,23 @@ const $  = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
 // ---------------------------------------------------------------- configurator
+// The headline and the control dock sit on top of the canvas. On a phone they
+// cover most of it, so the configurator is told how much room is actually left
+// and frames the car into that strip instead of the middle of the viewport.
+// Desktop reports nothing and keeps the original full-frame composition.
+const safeInsets = () => {
+  if (innerWidth >= 1024) return { top: 0, bottom: 0 };
+  const hero = $('#top').getBoundingClientRect();
+  const copy = $('#heroCopy').getBoundingClientRect();
+  const dock = $('#dock').getBoundingClientRect();
+  return {
+    top:    Math.max(0, copy.bottom - hero.top + 12),
+    bottom: Math.max(0, hero.bottom - dock.top + 12),
+  };
+};
+
 const car = createConfigurator($('#stage'), {
+  safeInsets,
   onReady() {
     const l = $('#loader');
     l.style.opacity = '0';
@@ -19,6 +35,9 @@ const car = createConfigurator($('#stage'), {
       '<p class="text-[11px] tracking-ultra text-bone-500">3D UNAVAILABLE ON THIS DEVICE</p>';
   },
 });
+
+// Webfonts land after the first paint and change how tall the hero copy is.
+document.fonts?.ready.then(() => car.refresh());
 
 // ---------------------------------------------------------------- swatch rows
 function buildSwatches(host, items, onPick) {
