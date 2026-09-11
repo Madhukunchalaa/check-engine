@@ -70,12 +70,12 @@
   }
   .svc:hover { @apply border-red-500/50; transform: translateY(-4px); }
   .svc-img {
-    @apply absolute inset-0 h-full w-full object-cover opacity-55 transition-all duration-500;
+    @apply absolute inset-0 h-full w-full object-cover opacity-90 transition-all duration-700 ease-out;
   }
-  .svc:hover .svc-img { @apply opacity-75; transform: scale(1.05); }
+  .svc:hover .svc-img { @apply opacity-100; transform: scale(1.04); }
   .svc::after {
     content: ''; @apply pointer-events-none absolute inset-0;
-    background: linear-gradient(180deg, rgba(8,8,10,.15) 0%, rgba(8,8,10,.75) 55%, rgba(8,8,10,.96) 100%);
+    background: linear-gradient(180deg, rgba(8,8,10,0) 0%, rgba(8,8,10,.25) 42%, rgba(8,8,10,.80) 78%, rgba(8,8,10,.95) 100%);
   }
   .svc-body { @apply relative z-10 flex h-full flex-col justify-end p-6; }
   .svc-tag  { @apply text-[8.5px] font-bold tracking-ultra text-red-500; }
@@ -114,10 +114,79 @@
   .meta-k { @apply text-[8.5px] font-bold tracking-ultra text-red-500; }
   .meta-v { @apply mt-2 text-[13px] leading-relaxed text-bone-200; }
 
+  /* ---------- process ---------- */
+  .step {
+    @apply relative pt-7;
+    border-top: 1px solid rgba(255,255,255,.12);
+  }
+  /* The red cap grows along the top rule as the step reveals. */
+  .step::before {
+    content: ''; @apply absolute left-0 top-0 h-[2px] bg-red-500;
+    width: 0; transition: width .9s cubic-bezier(.22,.61,.36,1);
+  }
+  .step.in::before { width: 46px; }
+  .step-n { @apply font-mono text-[11px] font-medium tracking-wide2 text-red-500; }
+  .step-h { @apply mt-4 font-display text-[22px] font-bold leading-none tracking-wide text-bone-100; }
+  .step-p { @apply mt-3 text-[13px] leading-relaxed text-bone-400; }
+
+  /* ---------- marques ---------- */
+  .marque {
+    @apply whitespace-nowrap font-display text-[17px] font-bold tracking-wide2 text-bone-500 transition-colors duration-300 sm:text-[20px];
+  }
+  .marque:hover { @apply text-bone-100; }
+
+  /* ---------- faq ---------- */
+  .faq { @apply border-b border-white/10; }
+  .faq summary {
+    @apply flex cursor-pointer list-none items-center justify-between gap-6 py-6 text-left
+           font-display text-[19px] font-bold tracking-wide text-bone-100 transition-colors duration-200 sm:text-[22px];
+  }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary:hover { @apply text-red-500; }
+  .faq summary .ico {
+    @apply relative grid h-8 w-8 shrink-0 place-items-center rounded-full border border-white/20 transition-all duration-300;
+  }
+  .faq[open] summary .ico { @apply rotate-45 border-red-500 bg-red-500; }
+  .faq-a { @apply max-w-[720px] pb-7 text-[13.5px] leading-relaxed text-bone-400; }
+
   .marquee-run::after {
     content: 'SERVICE & REPAIR · DENTING & PAINTING · PERFORMANCE UPGRADES · CERAMIC COATING · PPF · WRAPPING · ALLOY REFINISHING · CUSTOM EXHAUSTS · RETROFITS · ';
     @apply px-2 font-display text-[13px] tracking-ultra text-bone-500;
   }
+}
+
+/* ---------- scroll reveal ----------
+   One shared, quiet motion for every section: 22px up and a fade. Long enough
+   to read as deliberate, short enough that nothing is ever waited on. */
+.rv {
+  opacity: 0;
+  transform: translate3d(0, 22px, 0);
+  transition: opacity .85s cubic-bezier(.22,.61,.36,1), transform .85s cubic-bezier(.22,.61,.36,1);
+  will-change: opacity, transform;
+}
+.rv.in { opacity: 1; transform: none; }
+.rv-1 { transition-delay: .07s; }
+.rv-2 { transition-delay: .14s; }
+.rv-3 { transition-delay: .21s; }
+.rv-4 { transition-delay: .28s; }
+.rv-5 { transition-delay: .35s; }
+
+/* ---------- parallax car bands ---------- */
+.band {
+  @apply relative isolate overflow-hidden;
+}
+.band-bg {
+  @apply pointer-events-none absolute inset-0 h-[128%] w-full object-cover;
+  top: -14%;
+  will-change: transform;
+}
+.band-veil { @apply pointer-events-none absolute inset-0; }
+
+.stat-n {
+  @apply font-display text-[44px] font-bold leading-none tracking-tight text-bone-100 sm:text-[58px];
+}
+.stat-l {
+  @apply mt-2 text-[10px] font-bold uppercase tracking-ultra text-bone-500;
 }
 
 @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
@@ -144,4 +213,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  .rv { opacity: 1 !important; transform: none !important; }
+  .band-bg { transform: none !important; }
 }

@@ -119,7 +119,7 @@ function syncSpec() {
   $('#specLine').textContent = spec;
   const msg = `Hi Check Engines — I built this on your site:\n\n${spec}\n\nCan you quote me for it?`;
   const href = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(msg)}`;
-  ['#waBtn', '#waBtn2', '#waFloat'].forEach((s) => { const el = $(s); if (el) el.href = href; });
+  ['#waBtn', '#waBtn2', '#waBtn3', '#waFloat'].forEach((s) => { const el = $(s); if (el) el.href = href; });
 }
 syncSpec();
 
@@ -159,13 +159,81 @@ for (let i = 1; i <= 12; i++) {
   box.addEventListener('pointercancel', () => { dragging = false; });
 })();
 
+// ---------------------------------------------------------------- scroll reveal
+// Position-based rather than IntersectionObserver-based on purpose: the nav
+// anchors jump whole sections at a time, and anything skipped by a jump never
+// receives an intersection callback — it would stay invisible for good. A plain
+// "is it above the fold line yet" sweep catches those, and reveals anything the
+// visitor lands on regardless of how they got there.
+const revealSweep = (() => {
+  let pending = $$('.rv');
+  if (!pending.length) return () => {};
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    pending.forEach((el) => el.classList.add('in'));
+    return () => {};
+  }
+  let queued = false;
+  const run = () => {
+    queued = false;
+    const line = innerHeight * 0.88;
+    const still = [];
+    for (const el of pending) {
+      if (el.getBoundingClientRect().top < line) el.classList.add('in');
+      else still.push(el);
+    }
+    pending = still;
+  };
+  return () => {
+    if (queued || !pending.length) return;
+    queued = true;
+    requestAnimationFrame(run);
+  };
+})();
+addEventListener('scroll', revealSweep, { passive: true });
+addEventListener('resize', revealSweep);
+revealSweep();
+// Webfonts change element heights after first paint, so sweep again once settled.
+document.fonts?.ready.then(revealSweep);
+
+// ---------------------------------------------------------------- parallax bands
+// Transform-only, driven from a single rAF-throttled scroll listener, and only
+// while the band is actually on screen — anything else costs frames.
+const bands = $$('.band-bg');
+let parallaxTick = false;
+const runParallax = () => {
+  parallaxTick = false;
+  const vh = innerHeight;
+  bands.forEach((img) => {
+    const band = img.parentElement;
+    const r = band.getBoundingClientRect();
+    if (r.bottom < -80 || r.top > vh + 80) return;
+    const depth = Number(img.dataset.parallax || 0.15);
+    // -1 above the fold .. +1 below it
+    const progress = (r.top + r.height / 2 - vh / 2) / (vh / 2 + r.height / 2);
+    img.style.transform = `translate3d(0, ${(progress * depth * r.height).toFixed(1)}px, 0)`;
+  });
+};
+if (bands.length && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  addEventListener('scroll', () => {
+    if (parallaxTick) return;
+    parallaxTick = true;
+    requestAnimationFrame(runParallax);
+  }, { passive: true });
+  addEventListener('resize', runParallax);
+  runParallax();
+}
+
 // ---------------------------------------------------------------- nav
 const nav = $('#nav');
 const waFloat = $('#waFloat');
 const onScroll = () => {
   const y = scrollY;
-  nav.classList.toggle('bg-ink-950/92', y > 20);
-  nav.classList.toggle('backdrop-blur-xl', y > 20);
+  // Tailwind only generates opacity modifiers on its 5-step scale, so /92 was
+  // silently dropped and the bar sat fully transparent over the gallery. It also
+  // has to be near-solid: backdrop-blur alone smears whatever is behind it,
+  // which turned the compare slider's red divider into a wash across the nav.
+  nav.classList.toggle('bg-ink-950/95', y > 20);
+  nav.classList.toggle('backdrop-blur-lg', y > 20);
   nav.classList.toggle('shadow-[0_1px_0_rgba(255,255,255,.07)]', y > 20);
   const show = y > innerHeight * 0.8;
   waFloat.classList.toggle('opacity-0', !show);

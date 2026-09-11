@@ -80,8 +80,8 @@ export function createConfigurator(canvasHost, opts = {}) {
   canvasHost.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x08080A);
-  scene.fog = new THREE.FogExp2(0x08080A, 0.055);
+  scene.background = new THREE.Color(0x0A0A0B);
+  scene.fog = new THREE.FogExp2(0x0A0A0B, 0.048);
 
   const camera = new THREE.PerspectiveCamera(40, canvasHost.clientWidth / canvasHost.clientHeight, 0.1, 120);
 
@@ -133,7 +133,7 @@ export function createConfigurator(canvasHost, opts = {}) {
 
   // Studio rig: a cool key from above, a brand-red rim from behind, and a soft
   // white kicker on the opposite side to keep the far flank from going black.
-  const key = new THREE.DirectionalLight(0xEAF2FF, 2.1);
+  const key = new THREE.DirectionalLight(0xF4F7FC, 2.5);
   key.position.set(4.5, 8, -5);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
@@ -142,15 +142,15 @@ export function createConfigurator(canvasHost, opts = {}) {
   Object.assign(key.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6, near: 0.5, far: 26 });
   scene.add(key);
 
-  const rimRed = new THREE.SpotLight(0xE5252B, 7, 20, Math.PI / 6, 0.7, 1.6);
-  rimRed.position.set(-6.0, 4.2, 6.0);
+  const rimRed = new THREE.SpotLight(0xE5252B, 2.4, 18, Math.PI / 7, 0.8, 1.8);
+  rimRed.position.set(-5.4, 5.2, 5.4);
   scene.add(rimRed);
 
-  const kicker = new THREE.SpotLight(0xBBD4FF, 9, 24, Math.PI / 4.5, 0.6, 1.4);
+  const kicker = new THREE.SpotLight(0xE8EEF6, 11, 26, Math.PI / 4.2, 0.6, 1.4);
   kicker.position.set(6.5, 3.4, 4.5);
   scene.add(kicker);
 
-  scene.add(new THREE.AmbientLight(0x2A3038, 0.55));
+  scene.add(new THREE.AmbientLight(0x30343A, 0.7));
 
   // Turned up only in night mode.
   const keyRed = new THREE.PointLight(0xE5252B, 0, 14, 2);
@@ -386,14 +386,18 @@ export function createConfigurator(canvasHost, opts = {}) {
     toggleNight(on) {
       state.night = on ?? !state.night;
       renderer.toneMappingExposure = state.night ? 0.62 : 0.95;
-      key.intensity     = state.night ? 0.35 : 2.1;
-      kicker.intensity  = state.night ? 2.0  : 9;
-      rimRed.intensity  = state.night ? 18   : 7;
+      key.intensity     = state.night ? 0.35 : 2.5;
+      kicker.intensity  = state.night ? 2.0  : 11;
+      rimRed.intensity  = state.night ? 9    : 2.4;
       keyRed.intensity  = state.night ? 12   : 0;
       scene.environmentIntensity = state.night ? 0.14 : 0.42;
       if (state.night) api.toggleLights(true);
     },
     resume() { controls.autoRotate = true; },
+    // Stops the turntable for good. The compare-slider frames are captured from
+    // this scene, and they only wipe cleanly if both are shot from an identical
+    // camera — any residual rotation between captures breaks the illusion.
+    freeze() { frozen = true; controls.autoRotate = false; },
     // Re-measure once late-loading webfonts have settled the overlay heights.
     refresh() { onResize(); },
     summary() {
@@ -406,8 +410,20 @@ export function createConfigurator(canvasHost, opts = {}) {
   // ------------------------------------------------------------ loop
   const clock = new THREE.Clock();
   let idle = 0;
+  let frozen = false;
+  // Rendering a WebGL scene nobody can see is the main cause of scroll jank
+  // further down the page, so the loop idles out once the hero leaves view.
+  let onScreen = true;
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(
+      ([e]) => { onScreen = e.isIntersecting; if (onScreen) clock.getDelta(); },
+      { threshold: 0.01 }
+    ).observe(canvasHost);
+  }
+
   renderer.setAnimationLoop(() => {
-    const dt = clock.getDelta();
+    if (!onScreen) return;
+    const dt = Math.min(clock.getDelta(), 0.05);   // clamp after a stall
 
     if (flight) {
       flight.t = Math.min(1, flight.t + dt / flight.dur);
@@ -415,13 +431,13 @@ export function createConfigurator(canvasHost, opts = {}) {
       camera.position.lerpVectors(flight.fromPos, flight.toPos, k);
       controls.target.lerpVectors(flight.fromTgt, flight.toTgt, k);
       if (flight.t >= 1) { flight = null; idle = 0; }
-    } else if (!controls.autoRotate) {
+    } else if (!controls.autoRotate && !frozen) {
       // Resume the slow turn once the visitor stops interacting.
       idle += dt;
       if (idle > 3.5) controls.autoRotate = true;
     }
 
-    wheels.forEach((w) => { w.rotation.x -= dt * 1.5; });
+    if (!frozen) wheels.forEach((w) => { w.rotation.x -= dt * 1.5; });
     controls.update();
     renderer.render(scene, camera);
   });
